@@ -1,0 +1,57 @@
+# Build the great-docs site and publish it to GitHub Pages on every push to main.
+# One-time setup: Settings -> Pages -> Source: GitHub Actions.
+name: Publish docs
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # full history for page timestamps
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install package with dev and docs groups
+        run: uv sync --locked
+
+      - name: Install emoji font for who_am_i_gif()
+        run: sudo apt-get update && sudo apt-get install -y fonts-noto-color-emoji
+
+      - uses: quarto-dev/quarto-actions/setup@v2
+
+      - name: Build docs
+        run: uv run great-docs build
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: great-docs/_site
+          include-hidden-files: true
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

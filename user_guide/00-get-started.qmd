@@ -1,0 +1,86 @@
+---
+title: "Get started"
+guide-section: "Get started"
+jupyter: python3
+---
+
+`hubbub` makes some noise on your GitHub profile README. It introduces you as text or as an animated GIF, adds profile badges, pulls your activity from the GitHub API, and charts it. It is the Python counterpart to the R package [ghreadme](https://mjfrigaard.github.io/ghreadme/).
+
+## Installation
+
+`hubbub` isn't on PyPI. Add the development version from GitHub to a uv project:
+
+```bash
+uv add git+https://github.com/mjfrigaard/hubbub
+```
+
+or install it into the current environment:
+
+```bash
+uv pip install git+https://github.com/mjfrigaard/hubbub
+```
+
+`hubbub` depends on `matplotlib`, `numpy`, `pillow`, and `polars`. Interactive scatter plots need the `plotly` extra (`hubbub[plotly]`).
+
+## Your profile README
+
+GitHub shows the `README.md` from a repo named after your username (for example, `mjfrigaard/mjfrigaard`) at the top of your profile. In that repo, `use_profile_readme()` writes a `build_readme.py` script:
+
+```python
+from hubbub import use_profile_readme
+
+use_profile_readme(
+    name="Martin",
+    likes="#rstats and data visualization.",
+    learn="Shiny for Python app development and Linux administration.",
+    work="Shiny app-package development tools.",
+    collab="#rstats and #pystats packages for data science.",
+    username="mjfrigaard",
+)
+```
+
+Run it with `uv run --with hubbub python build_readme.py` (or `python build_readme.py` in an environment with `hubbub`) to write `README.md`. To rebuild it every week, add a GitHub Action:
+
+```python
+from hubbub import use_profile_readme_action
+
+use_profile_readme_action(cron="0 6 * * 0")  # Sundays at 06:00 UTC
+```
+
+## Introductions
+
+`who_am_i()` prints your introduction one line at a time and returns the lines:
+
+```{python}
+#| label: who-am-i
+from hubbub import who_am_i
+
+lines = who_am_i(
+    name="Martin",
+    likes="#rstats and data visualization.",
+    learn="Shiny for Python app development and Linux administration.",
+    work="Shiny app-package development tools.",
+    collab="#rstats and #pystats packages for data science.",
+    delay=0,
+)
+```
+
+`who_am_i_gif()` takes the same arguments and writes the introduction as a terminal style GIF. The walkthrough shows the result.
+
+## Badges
+
+`gh_badges()` returns Markdown for [GitHub profile summary cards](https://github-profile-summary-cards.vercel.app/demo.html), and `so_rep()` returns HTML for a Stack Overflow reputation badge:
+
+```{python}
+#| label: badges
+from hubbub import gh_badges, so_rep
+
+print(gh_badges("mjfrigaard", badge=["details", "stats"], theme="dark"))
+```
+
+```{python}
+#| label: so-rep
+print(so_rep(username="martin-frigaard", user_id=4926446))
+```
+
+Next, the [walkthrough](01-walkthrough.qmd) pulls real data and charts it.

@@ -1,0 +1,59 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hubbub"
+version = "0.1.0"
+description = "Make some noise on your GitHub profile README from Python"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Martin Frigaard", email = "mjfrigaard@pm.me" }]
+requires-python = ">=3.10"
+dependencies = [
+    "matplotlib>=3.7",
+    "numpy>=1.24",
+    "pillow>=10.0",
+    "polars>=1.0",
+]
+
+[project.urls]
+Homepage = "https://mjfrigaard.github.io/hubbub/"
+Repository = "https://github.com/mjfrigaard/hubbub"
+
+[project.optional-dependencies]
+plotly = ["plotly>=5.0", "pandas"]
+
+[dependency-groups]
+dev = ["pytest", "pytest-cov", "ruff", "mypy", "plotly>=5.0", "pandas"]
+docs = [
+    "great-docs; python_version >= '3.11'",
+    "jupyter",
+    "pyarrow",
+    "plotly>=5.0",
+    "pandas",
+]
+
+[tool.uv]
+default-groups = ["dev", "docs"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hubbub"]
+
+[tool.ruff]
+src = ["src"]
+exclude = ["src/hubbub/templates"]
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "src"]
+addopts = "--doctest-modules --ignore=src/hubbub/templates --cov=hubbub --cov-report=term-missing"
+doctest_optionflags = ["NORMALIZE_WHITESPACE", "ELLIPSIS"]

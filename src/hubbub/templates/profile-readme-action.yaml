@@ -1,0 +1,33 @@
+# Rebuild the profile README on a schedule so GIFs and stats stay fresh.
+name: Rebuild profile README
+
+on:
+  schedule:
+    - cron: "{{cron}}"
+  workflow_dispatch:
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install emoji font for GIFs
+        run: sudo apt-get update && sudo apt-get install -y fonts-noto-color-emoji
+
+      - name: Build README
+        run: uv run --python 3.12 --with "git+https://github.com/{{repo}}" python build_readme.py
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add README.md *.gif 2>/dev/null || true
+          if ! git diff --staged --quiet; then
+            git commit -m "Rebuild profile README"
+            git push
+          fi

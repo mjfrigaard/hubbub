@@ -1,0 +1,288 @@
+---
+title: "Walkthrough: my profile README"
+guide-section: "Walkthrough"
+jupyter: python3
+---
+
+```{python}
+#| label: setup
+#| include: false
+import tempfile
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import polars as pl
+import hubbub as hb
+
+out_dir = Path(tempfile.mkdtemp(prefix="hubbub-gifs-"))
+
+
+def show_gif(path):
+    """Embed a GIF in the page so it survives rebuilds and the freeze cache."""
+    import base64
+
+    data = base64.b64encode(Path(path).read_bytes()).decode()
+    print(f'<img src="data:image/gif;base64,{data}" style="width:100%">')
+```
+
+On this page I'll build the charts and GIFs for my own profile README ([mjfrigaard/mjfrigaard](https://github.com/mjfrigaard/mjfrigaard)) with `hubbub`. We'll pull my GitHub activity, take a look at it, chart it a few ways, and then animate three of the charts.
+
+## Collect the data
+
+`collect_git_commits()` calls the GitHub API, so set a token first (`export GITHUB_PAT=$(gh auth token)` works if you use the GitHub CLI). Asking for all four types returns a dict of DataFrames:
+
+```python
+stats = hb.collect_git_commits(
+    user="mjfrigaard",
+    emails=["you@example.com", "you@work.example.com"],
+    include=["commits", "stars", "issues", "prs"],
+    tz="America/Phoenix",
+)
+for name, df in stats.items():
+    df.write_parquet(f"data/{name}.parquet")
+```
+
+The `emails` filter keeps only commits I authored, and `tz` sets the time zone for the `local_ts`, `date`, `hour`, `weekday`, and `year` columns. Pulling every commit from every repo takes a few hundred API calls, so I saved the results to parquet files and read them back here:
+
+```{python}
+#| label: read
+stats = {
+    name: pl.read_parquet(f"data/{name}.parquet")
+    for name in ["commits", "stars", "issues", "prs"]
+}
+commits = stats["commits"]
+{name: df.shape for name, df in stats.items()}
+```
+
+## A first look
+
+Each row in `commits` is one commit:
+
+```{python}
+#| label: glimpse
+commits.select("repo", "local_ts", "date", "hour", "weekday", "year").tail(5)
+```
+
+Which repos have the most commits?
+
+```{python}
+#| label: top-repos
+(
+    commits.group_by("repo")
+    .agg(commits=pl.len(), first=pl.col("date").min(), last=pl.col("date").max())
+    .sort("commits", descending=True)
+    .head(8)
+)
+```
+
+And which of my repos have the most stars?
+
+```{python}
+#| label: stars
+stats["stars"].select("repo", "stargazers_count", "language").head(5)
+```
+
+The `issues` and `prs` tables cover everything I've opened across GitHub, not only in my own repos:
+
+```{python}
+#| label: prs
+(
+    stats["prs"]
+    .with_columns(owner=pl.col("repo").str.split("/").list.first())
+    .group_by("owner", "state")
+    .agg(prs=pl.len())
+    .sort("prs", descending=True)
+)
+```
+
+## Charts
+
+Every chart function takes the commits DataFrame plus optional `repo`, `date_begin`, and `date_end` filters, and returns a matplotlib `Figure`.
+
+### Calendar heatmap
+
+`calendar_heatmap_plot()` draws the familiar GitHub grid with one row per year:
+
+```{python}
+#| label: calendar
+#| fig-width: 11
+hb.calendar_heatmap_plot(commits, date_begin="2023-01-01");
+```
+
+### Cumulative commits
+
+`cumulative_line_plot()` keeps the `top_n` busiest repos as their own lines and rolls the rest into "Other":
+
+```{python}
+#| label: cumulative
+hb.cumulative_line_plot(commits, date_begin="2023-01-01", top_n=8);
+```
+
+### Punchcard
+
+`punchcard_plot()` shows when I commit, by weekday and hour (in Phoenix time):
+
+```{python}
+#| label: punchcard
+hb.punchcard_plot(commits, date_begin="2023-01-01");
+```
+
+### Scatter with densities
+
+`scatter_density_plot()` plots any two of `"repo"`, `"time"`, `"date"`, and `"weekday"`. The `"density"` type adds marginal density curves:
+
+```{python}
+#| label: scatter-density
+hb.scatter_density_plot(
+    commits, date_begin="2025-01-01", x="date", y="time", plot_type="density"
+);
+```
+
+Set `plot_type="plotly"` for an interactive version you can hover over:
+
+```{python}
+#| label: scatter-plotly
+hb.scatter_density_plot(
+    commits, date_begin="2025-01-01", x="weekday", y="time", plot_type="plotly"
+)
+```
+
+### Spirals
+
+The spiral charts make one turn per year, starting in the center, with January at the top. Each one shows the same daily counts a different way:
+
+```{python}
+#| label: spiral-heatmap
+hb.spiral_heatmap_plot(commits, date_begin="2020-01-01");
+```
+
+```{python}
+#| label: spiral-points
+hb.spiral_points_plot(commits, date_begin="2020-01-01");
+```
+
+```{python}
+#| label: spiral-horizon
+hb.spiral_horizon_plot(commits, date_begin="2020-01-01");
+```
+
+### Interactive spiral
+
+Every spiral function also takes `plot_type="plotly"`. Hover over a bar to see the date and commit count, click a band in the legend to hide it, and drag to zoom:
+
+```{python}
+#| label: spiral-plotly
+hb.spiral_horizon_plot(commits, date_begin="2020-01-01", plot_type="plotly")
+```
+
+GitHub strips JavaScript from READMEs, so my profile shows a static copy of this chart that links here:
+
+```python
+fig = hb.spiral_horizon_plot(commits, date_begin="2020-01-01")
+fig.savefig("spiral.png", dpi=96, bbox_inches="tight", facecolor="white")
+```
+
+## Animate the charts
+
+A GIF is a stack of frames. Each recipe below saves one chart per frame to a temporary folder, then `make_gif()` assembles them. Close each figure after saving it so they don't pile up in memory.
+
+### Recipe 1: cumulative commits, sliding the end date
+
+```{python}
+#| label: gif-cumulative
+#| output: asis
+from datetime import date
+
+ends = pl.date_range(
+    date(2023, 2, 1), commits["date"].max(), interval="1mo", eager=True
+)
+frames = Path(tempfile.mkdtemp())
+for i, end in enumerate(ends, start=1):
+    fig = hb.cumulative_line_plot(
+        commits, date_begin="2023-01-01", date_end=end, top_n=8
+    )
+    fig.set_size_inches(10, 6)
+    fig.savefig(frames / f"{i:04d}.png", dpi=96, facecolor="white")
+    plt.close(fig)
+
+gif = hb.make_gif(frames, out_dir / "cumulative.gif", width=1000, height=600,
+                  first_duration=1, frame_duration=0.4, last_duration=4)
+show_gif(gif)
+```
+
+### Recipe 2: calendar heatmap, year by year
+
+```{python}
+#| label: gif-calendar
+#| output: asis
+years = sorted(commits.filter(pl.col("year") >= 2023)["year"].unique())
+frames = Path(tempfile.mkdtemp())
+for i, yr in enumerate(years, start=1):
+    fig = hb.calendar_heatmap_plot(
+        commits, date_begin=f"{years[0]}-01-01", date_end=f"{yr}-12-31",
+        title=f"Through {yr}",
+    )
+    fig.set_size_inches(11, 7)
+    fig.savefig(frames / f"{i:04d}.png", dpi=96, facecolor="white")
+    plt.close(fig)
+
+gif = hb.make_gif(frames, out_dir / "calendar.gif", width=1100, height=700,
+                  first_duration=1, frame_duration=1.2, last_duration=4)
+show_gif(gif)
+```
+
+### Recipe 3: a punchcard for each top repo
+
+```{python}
+#| label: gif-punchcard
+#| output: asis
+top_repos = (
+    commits.group_by("repo").agg(n=pl.len())
+    .sort("n", descending=True)["repo"].head(6).to_list()
+)
+frames = Path(tempfile.mkdtemp())
+for i, repo in enumerate(top_repos, start=1):
+    fig = hb.punchcard_plot(commits, repo=repo)
+    fig.set_size_inches(10, 5)
+    fig.savefig(frames / f"{i:04d}.png", dpi=96, facecolor="white")
+    plt.close(fig)
+
+gif = hb.make_gif(frames, out_dir / "punchcard.gif", width=1000, height=500,
+                  first_duration=1, frame_duration=1.5, last_duration=4)
+show_gif(gif)
+```
+
+To rank repos by stars instead, use `stats["stars"]["repo"].head(6)`.
+
+### The introduction
+
+```{python}
+#| label: gif-intro
+#| output: asis
+gif = hb.who_am_i_gif(
+    name="Martin",
+    likes="#rstats and data visualization.",
+    learn="Shiny for Python app development and Linux administration.",
+    work="Shiny app-package development tools.",
+    collab="#rstats and #pystats packages for data science.",
+    output=out_dir / "who_am_i.gif",
+)
+show_gif(gif)
+```
+
+## Put it in the README
+
+In the profile repo, save the GIFs next to `README.md` and point to them from `build_readme.py`:
+
+```python
+sections = [
+    "# Hi there 👋",
+    "![](who_am_i.gif)",
+    "## GitHub activity",
+    "![Cumulative commits](cumulative.gif)",
+    "![Calendar heatmap](calendar.gif)",
+    "![Punchcard](punchcard.gif)",
+    hb.gh_badges("mjfrigaard", ["details", "stats", "repo_lang"], theme="dark"),
+]
+Path("README.md").write_text("\n\n".join(sections) + "\n", encoding="utf-8")
+```

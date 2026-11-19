@@ -1,0 +1,54 @@
+# Great Docs Configuration
+# See https://posit-dev.github.io/great-docs/user-guide/configuration.html
+
+parser: numpy
+dynamic: true
+
+display_name: hubbub
+repo: https://github.com/mjfrigaard/hubbub
+site_url: https://mjfrigaard.github.io/hubbub/
+pypi: false
+
+authors:
+  - name: Martin Frigaard
+    role: Author
+    email: mjfrigaard@pm.me
+
+skill:
+  enabled: false
+
+changelog:
+  enabled: false
+
+reference:
+  - title: Profile README
+    desc: Introduce yourself, add badges, and scaffold the README build.
+    contents:
+      - who_am_i
+      - who_am_i_gif
+      - gh_badges
+      - so_rep
+      - use_profile_readme
+      - use_profile_readme_action
+  - title: GitHub data
+    desc: Pull commits, stars, issues, and pull requests from the GitHub API.
+    contents:
+      - collect_git_commits
+      - add_time_columns
+  - title: Commit charts
+    desc: Matplotlib charts of commit activity.
+    contents:
+      - calendar_heatmap_plot
+      - cumulative_line_plot
+      - punchcard_plot
+      - scatter_density_plot
+  - title: Spiral charts
+    desc: One turn per year, from the center out.
+    contents:
+      - spiral_points_plot
+      - spiral_heatmap_plot
+      - spiral_horizon_plot
+  - title: Animation
+    desc: Turn a folder of PNG frames into a GIF.
+    contents:
+      - make_gif
